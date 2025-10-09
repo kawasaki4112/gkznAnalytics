@@ -1,20 +1,24 @@
-import enum
+import os, enum
 from sqlalchemy import event, Float, String, Integer, BigInteger, DateTime, ForeignKey, Enum, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from uuid import uuid4, UUID
-from datetime import datetime
 
+from datetime import datetime
+import pytz
+
+tz = pytz.timezone(os.getenv("TIMEZONE", "Asia/Yakutsk"))
+
+
+def tz_now_naive() -> datetime:
+    return datetime.now(tz=tz).replace(tzinfo=None)
 
 class BaseEntity(DeclarativeBase):
     __abstract__ = True
 
-    id: Mapped[UUID] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    modified_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=tz_now_naive)
+    modified_at: Mapped[datetime] = mapped_column(DateTime, default=tz_now_naive, onupdate=tz_now_naive)
 
-@event.listens_for(BaseEntity, "before_update", propagate=True)
-def receive_before_update(mapper, connection, target):
-    target.modified_at = datetime.utcnow()
 
 class UserRole(str, enum.Enum):
     USER = 'user'
@@ -61,7 +65,8 @@ class NetPromoterScore(BaseEntity):
     __tablename__ = 'net_promoter_scores'
     
     aoq_id: Mapped[UUID] = mapped_column(ForeignKey('assessments_of_quality.id'), unique=True)
-    
+    user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
+
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(String(1000))
 

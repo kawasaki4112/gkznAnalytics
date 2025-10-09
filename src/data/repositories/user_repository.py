@@ -11,16 +11,4 @@ class UserRepository(CRUDRepository[User]):
     async def get_by_tg_id(self, tg_id: int) -> Optional[User]:
         return await self.get(tg_id=tg_id)
 
-    async def update_balance(self, tg_id: int, sum: float, operation: str) -> Optional[User]:
-        user = await self.get_by_tg_id(tg_id)
-        if user:
-            if operation == 'add':
-                user.balance += sum
-            elif operation == 'subtract':
-                user.balance -= sum
-            else:
-                raise ValueError("Operation must be 'add' or 'subtract'")
-            await self.update(user)
-        return user
-
 user_crud = UserRepository()

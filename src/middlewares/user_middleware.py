@@ -19,12 +19,12 @@ class ExistsUserMiddleware(BaseMiddleware):
 
             user_id = this_user.id
             user_username = this_user.username or ""
-            user_fullname = this_user.first_name+this_user.last_name if this_user.last_name else this_user.first_name or ""
+            user_fullname = this_user.first_name+" "+this_user.last_name if this_user.last_name else this_user.first_name or ""
             
             if get_user is None:
                 await user_crud.create(tg_id=user_id, username=user_username.lower(), full_name=user_fullname)
             else:
-                if get_user.username != user_username.lower():
+                if get_user.username != user_username.lower() or get_user.full_name != user_fullname:
                     await user_crud.update(
                         filters={"tg_id": get_user.tg_id},
                         updates={"username": user_username.lower(),

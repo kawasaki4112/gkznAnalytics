@@ -1,6 +1,7 @@
 import os
 import asyncio
 import colorama
+import logging
 
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
@@ -11,6 +12,7 @@ from src.routers import register_all_routers
 from src.utils.misc.bot_logging import bot_logger
 
 load_dotenv(override=True)
+
 
 async def main():
     await init_db()
@@ -27,4 +29,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

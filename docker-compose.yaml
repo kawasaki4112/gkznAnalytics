@@ -1,32 +1,26 @@
-version: '3.9'
-
 services:
   app:
-    image: bot:latest
     build:
       context: .
-      dockerfile: DOCKERFILE
-    container_name: bot
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - db
     env_file:
       - .env
-    ports:
-      - "8000:8000"
     volumes:
       - ./:/app
+    command: ["python", "main.py"]
 
   db:
     image: postgres:16
-    container_name: template_db
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: template_db
+      POSTGRES_DB: gkznAnalytics_db
     restart: unless-stopped
     env_file:
-      - .env.db
+      - .env
     volumes:
       - db_data:/var/lib/postgresql/data
 
