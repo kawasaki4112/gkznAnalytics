@@ -9,8 +9,12 @@ class BaseEntity(DeclarativeBase):
     __abstract__ = True
 
     id: Mapped[UUID] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    created_on: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    modified_on: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=func.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    modified_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+@event.listens_for(BaseEntity, "before_update", propagate=True)
+def receive_before_update(mapper, connection, target):
+    target.modified_at = datetime.utcnow()
 
 class UserRole(str, enum.Enum):
     USER = 'user'
@@ -27,49 +31,39 @@ class User(BaseEntity):
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.USER, nullable=False)
-    
-    assessment_of_qualities: Mapped[list["AssessmentOfQuality"]] = relationship(back_="user")
-    net_promoter_scores: Mapped[list["NetPromoterScore"]] = relationship(back_populates="user")
-    
+
+    aoq: Mapped[list["AssessmentOfQuality"]] = relationship(back_populates="user")
+    nps: Mapped[list["NetPromoterScore"]] = relationship(back_populates="user")
+
     
 class Specialist(BaseEntity):
     __tablename__ = 'specialists'
     
     fullname: Mapped[str] = mapped_column(String(255), nullable=False)
+    position: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    assessment_of_quality: Mapped[list["AssessmentOfQuality"]] = relationship(backref="specialist")
-    net_promoter_scores: Mapped[list["NetPromoterScore"]] = relationship(back_populates="specialist")
+    aoq: Mapped[list["AssessmentOfQuality"]] = relationship(back_populates="specialist", cascade="all, delete-orphan")
 
-    
 class AssessmentOfQuality(BaseEntity):
     __tablename__ = 'assessments_of_quality'
     
-    score: Mapped[int] = mapped_column(Integer, nullable=False)  # Assuming quality is rated on a scale of 1-10
-    comment: Mapped[str | None] = mapped_column(String(1000))  # Optional comment field
+    user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
+    specialist_id: Mapped[UUID] = mapped_column(ForeignKey('specialists.id'), nullable=False)
     
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    specialist_id: Mapped[str] = mapped_column(ForeignKey("specialists.id"), nullable=False)
-    
-    user: Mapped["User"] = relationship(backref="assessments_of_quality")
-    specialist_id: Mapped[UUID] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))  # ID of the specialist being rated
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(1000))
 
-    net_promoter_score: Mapped["NetPromoterScore"] = relationship(
-        back_populates="assessment_of_quality", uselist=False
-    )
+    user: Mapped["User"] = relationship(back_populates="aoq")
+    nps: Mapped["NetPromoterScore"] = relationship(back_populates="aoq", uselist=False, cascade="all, delete-orphan")
+    specialist: Mapped["Specialist"] = relationship(back_populates="aoq")
     
 class NetPromoterScore(BaseEntity):
     __tablename__ = 'net_promoter_scores'
     
-    score: Mapped[int] = mapped_column(Integer, nullable=False)  # Score from 0 to 10
-    comment: Mapped[str | None] = mapped_column(String(1000))  # Optional comment field
+    aoq_id: Mapped[UUID] = mapped_column(ForeignKey('assessments_of_quality.id'), unique=True)
+    
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(1000))
 
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    specialist_id: Mapped[str] = mapped_column(ForeignKey("specialists.id"), nullable=False)
-    assessment_of_quality_id: Mapped[str] = mapped_column(
-        ForeignKey("assessments_of_quality.id"), unique=True, nullable=False
-    )
-        
-    user: Mapped["User"] = relationship(backref="net_promoter_scores")
-    assessment_of_quality: Mapped["AssessmentOfQuality"] = relationship(
-        back_populates="net_promoter_score"
-    )
+    user: Mapped["User"] = relationship(back_populates="nps")
+    aoq: Mapped["AssessmentOfQuality"] = relationship(back_populates="nps", uselist=False)
