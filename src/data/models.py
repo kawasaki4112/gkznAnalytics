@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import event, Float, String, Integer, BigInteger, DateTime, ForeignKey, Enum
+from sqlalchemy import event, Float, String, Integer, BigInteger, DateTime, ForeignKey, Enum, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from uuid import uuid4, UUID
 from datetime import datetime
@@ -10,19 +10,7 @@ class BaseEntity(DeclarativeBase):
 
     id: Mapped[UUID] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     created_on: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    modified_on: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-@event.listens_for(BaseEntity, "before_update", propagate=True)
-def _update_modified_on(mapper, connection, target):
-    target.modified_on = datetime.utcnow()
-
-# ENUMERATIONS
-class OrderStatus(str, enum.Enum):
-    PENDING = 'pending'
-    PAID = 'paid'
-    COMPLETED = 'completed'
-    CANCELLED = 'cancelled'
-
+    modified_on: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=func.utcnow)
 
 class UserRole(str, enum.Enum):
     USER = 'user'
@@ -38,54 +26,50 @@ class User(BaseEntity):
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(255))
-    balance: Mapped[float] = mapped_column(Float, default=0.0)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.USER, nullable=False)
+    
+    assessment_of_qualities: Mapped[list["AssessmentOfQuality"]] = relationship(back_="user")
+    net_promoter_scores: Mapped[list["NetPromoterScore"]] = relationship(back_populates="user")
+    
+    
+class Specialist(BaseEntity):
+    __tablename__ = 'specialists'
+    
+    fullname: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    orders: Mapped[list["Order"]] = relationship('Order', back_populates='user')
+    assessment_of_quality: Mapped[list["AssessmentOfQuality"]] = relationship(backref="specialist")
+    net_promoter_scores: Mapped[list["NetPromoterScore"]] = relationship(back_populates="specialist")
 
+    
+class AssessmentOfQuality(BaseEntity):
+    __tablename__ = 'assessments_of_quality'
+    
+    score: Mapped[int] = mapped_column(Integer, nullable=False)  # Assuming quality is rated on a scale of 1-10
+    comment: Mapped[str | None] = mapped_column(String(1000))  # Optional comment field
+    
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    specialist_id: Mapped[str] = mapped_column(ForeignKey("specialists.id"), nullable=False)
+    
+    user: Mapped["User"] = relationship(backref="assessments_of_quality")
+    specialist_id: Mapped[UUID] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))  # ID of the specialist being rated
 
-class Category(BaseEntity):
-    __tablename__ = 'categories'
+    net_promoter_score: Mapped["NetPromoterScore"] = relationship(
+        back_populates="assessment_of_quality", uselist=False
+    )
+    
+class NetPromoterScore(BaseEntity):
+    __tablename__ = 'net_promoter_scores'
+    
+    score: Mapped[int] = mapped_column(Integer, nullable=False)  # Score from 0 to 10
+    comment: Mapped[str | None] = mapped_column(String(1000))  # Optional comment field
 
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    description: Mapped[str | None] = mapped_column(String(255))
-
-    products: Mapped[list["Product"]] = relationship('Product', back_populates='category')
-
-
-class Product(BaseEntity):
-    __tablename__ = 'products'
-
-    photo: Mapped[str | None] = mapped_column(String(500))
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(500))
-    price: Mapped[float] = mapped_column(Float, nullable=False)
-    file_url: Mapped[str] = mapped_column(String(500), nullable=False)
-    category_id: Mapped[str] = mapped_column(String(36), ForeignKey('categories.id'))
-
-    category: Mapped[Category] = relationship('Category', back_populates='products')
-    order_items: Mapped[list["OrderItem"]] = relationship('OrderItem', back_populates='product')
-
-
-class Order(BaseEntity):
-    __tablename__ = 'orders'
-
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'))
-    order_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING)
-    total_price: Mapped[float] = mapped_column(Float, nullable=False)
-
-    user: Mapped[User] = relationship('User', back_populates='orders')
-    items: Mapped[list["OrderItem"]] = relationship('OrderItem', back_populates='order', cascade='all, delete-orphan')
-
-
-class OrderItem(BaseEntity):
-    __tablename__ = 'order_items'
-
-    order_id: Mapped[str] = mapped_column(String(36), ForeignKey('orders.id'))
-    product_id: Mapped[str] = mapped_column(String(36), ForeignKey('products.id'))
-    price: Mapped[float] = mapped_column(Float, nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-
-    order: Mapped[Order] = relationship('Order', back_populates='items')
-    product: Mapped[Product] = relationship('Product', back_populates='order_items')
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    specialist_id: Mapped[str] = mapped_column(ForeignKey("specialists.id"), nullable=False)
+    assessment_of_quality_id: Mapped[str] = mapped_column(
+        ForeignKey("assessments_of_quality.id"), unique=True, nullable=False
+    )
+        
+    user: Mapped["User"] = relationship(backref="net_promoter_scores")
+    assessment_of_quality: Mapped["AssessmentOfQuality"] = relationship(
+        back_populates="net_promoter_score"
+    )

@@ -1,6 +1,7 @@
 from typing import Union
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Co
 from aiogram.fsm.context import FSMContext
 
 from src.data.repositories.category_repository import category_crud
@@ -14,7 +15,8 @@ router = Router(name="user_router")
 select_menu_item = "Выберите пункт меню:"
 
 @router.callback_query(F.data.in_(['main_menu']))
-@router.message(F.text.in_(('🏠 Главное меню', '/start')))
+@router.message(F.text.in_('🏠 Главное меню'))
+@router.message
 async def start(event: Union[Message,CallbackQuery], state: FSMContext):
     await state.clear()
     if isinstance(event, CallbackQuery):
