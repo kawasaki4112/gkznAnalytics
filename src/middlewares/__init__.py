@@ -6,6 +6,7 @@ from src.middlewares.error_logging_middleware import ErrorLoggingMiddleware
 from src.middlewares.user_middleware import ExistsUserMiddleware
 from src.middlewares.throttling_middleware import ThrottlingMiddleware
 from src.middlewares.ban_middleware import BanCheckMiddleware
+from src.middlewares.main_admin_middleware import AdminCheckMiddleware
 
 
 def register_all_middlwares(dp: Dispatcher):
@@ -14,6 +15,9 @@ def register_all_middlwares(dp: Dispatcher):
 
     dp.callback_query.outer_middleware(ExistsUserMiddleware())
     dp.message.outer_middleware(ExistsUserMiddleware())
+    
+    dp.callback_query.outer_middleware(AdminCheckMiddleware())
+    dp.message.middleware(AdminCheckMiddleware())
 
     dp.callback_query.outer_middleware(ThrottlingMiddleware())
     dp.message.middleware(ThrottlingMiddleware())

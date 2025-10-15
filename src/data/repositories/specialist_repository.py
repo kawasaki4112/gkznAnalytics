@@ -7,6 +7,6 @@ from src.data.models import Specialist
 class SpecialistRepository(CRUDRepository[Specialist]):
     def __init__(self):
         super().__init__(Specialist)
-
-
-user_crud = SpecialistRepository()
+    
+    
+specialist_crud = SpecialistRepository()
