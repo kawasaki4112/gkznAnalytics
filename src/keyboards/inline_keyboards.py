@@ -54,7 +54,7 @@ async def social_category_selection_kb(
     """
     Клавиатура для выбора социальной категории или подкатегории с пагинацией.
     """
-    per_page = 3
+    per_page = 10
     if _type == "ctg":
         categories = await social_category_crud.get_list()
     else:
@@ -117,7 +117,7 @@ async def service_actions_kb(action: str, page: int = 1) -> InlineKeyboardMarkup
     Клавиатура для действий с услугами с пагинацией.
     """
     services = await service_crud.get_list()
-    per_page = 2
+    per_page = 10
     total = len(services)
     start = (page - 1) * per_page
     end = start + per_page

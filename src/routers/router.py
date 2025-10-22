@@ -40,19 +40,27 @@ async def start(event: Union[Message,CallbackQuery], state: FSMContext, command:
             aoq_list = await aoq_crud.get_list(user_id=user.id)
             now = tz_now_naive()
             last_week = now - timedelta(days=7)
-            aoq_on_last_7_days = bool()
+            
+            aoq_on_last_7_days = False
             for aoq in aoq_list:
                 if aoq.created_at > last_week:
                     aoq_on_last_7_days = True
                     break
+
+            # если была оценка за последние 7 дней → запрещаем
             if aoq_on_last_7_days:
-                await event.answer("Пожалуйста, выберите вашу социальную категорию:", 
-                                reply_markup=await ikb.social_category_selection_kb(_type="ctg", action="select"))
+                await event.answer(
+                    "Вы уже оставляли оценку за последние 7 дней. Спасибо!",
+                    reply_markup=await rkb.main_menu_kb(user.tg_id)
+                )
+            else:
+                await event.answer(
+                    "Пожалуйста, выберите вашу социальную категорию:",
+                    reply_markup=await ikb.social_category_selection_kb(_type="ctg", action="select")
+                )
                 await state.set_state(st.UserStates.waiting_for_social_category)
                 await state.update_data(specialist_id=command.args)
-            else:
-                await event.answer("Вы уже оставляли оценку за последние 7 дней. Спасибо!", reply_markup=await rkb.main_menu_kb(user.tg_id))
-            
+
         else:
             await event.answer(f"Привет! Я помощник ГКЗН", reply_markup=await rkb.main_menu_kb(user.tg_id))
 
@@ -89,12 +97,12 @@ async def process_username(event: Message, state: FSMContext):
         role = "admin" if "admin" in data['action'] else "moderator"
 
         if action == "removed":
-            await rkb.user_crud.update(
+            await user_crud.update(
                 filters={"username": username},
                 updates={"role": UserRole.USER.value}
             )
         else:
-            await rkb.user_crud.update(
+            await user_crud.update(
                 filters={"username": username},
                 updates={"role": role}
             )
@@ -125,7 +133,7 @@ async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
         await event.message.delete()
         specialists = await specialist_crud.get_list()
         if not specialists:
-            await event.answer("Список специалистов пуст.", reply_markup=await ikb.specialist_action_kb())
+            await event.message.answer("Список специалистов пуст.", reply_markup=await ikb.specialist_action_kb())
             return
 
         lines = [
@@ -314,7 +322,7 @@ async def process_assessment_score(event: CallbackQuery, state: FSMContext):
             service_id=state_data.get('assessment_service_id'),
             score=score,
         )
-        await event.message.edit_text("Напишите комментарий к оценке:", reply_markup=None)
+        await event.message.edit_text("Напишите предложения по улучшению", reply_markup=None)
         await state.update_data(aoq_id=aoq.id)
         await state.set_state(st.UserStates.waiting_for_assessment_comment)
         asyncio.create_task(send_nps(event, state, aoq.id))
@@ -337,12 +345,13 @@ async def process_assessment_comment(event: Message, state: FSMContext):
             filters={"id": aoq_id},
             updates={"comment": event.text}
         )
-        await event.answer("Спасибо за ваш комментарий!", reply_markup=await rkb.main_menu_kb(event.from_user.id))
+        await event.answer("Спасибо за ваши предложения по улучшению!", reply_markup=await rkb.main_menu_kb(event.from_user.id))
     await state.clear()
 
 
 async def send_nps(event: Message, state: FSMContext, aoq_id: str):
-    await asyncio.sleep(10)
+    nps_delay = int(os.getenv("NPS_DELAY_MINUTES", "10")) * 60
+    await asyncio.sleep(nps_delay)
     await event.message.answer("Пожалуйста, оцените вашу общую удовлетворенность услугой, порекомендуете ли вы нас?", 
                        reply_markup=await ikb.assessment_score_kb(_type="nps"))
     await state.set_state(st.UserStates.waiting_for_assessment_score)
@@ -464,7 +473,7 @@ async def process_category_import(event: Message, state: FSMContext):
             )
             created_count += 1
     os.remove(file_path)
-    await event.answer(f"✅ Импорт завершён! Создано {created_count} записей.", reply_markup=await rkb.social_category_actions_kb())
+    await event.answer(f"✅ Импорт завершён! Создано {created_count} записей.", reply_markup=await ikb.social_category_actions_kb())
     await state.clear()
     
 @router.message(st.CategoryStates.waiting_for_category_name)
