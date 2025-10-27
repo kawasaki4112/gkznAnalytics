@@ -37,8 +37,7 @@ from src.data.models import tz_now_naive
 #     Settingsx.update(misc_profit_month=get_unix())
 
 async def cleanup_old_backups(folder_path="src/data/backups", keep_latest=7):
-    if not await aiofiles.os.path.exists(folder_path):
-        raise FileNotFoundError(f"Папка {folder_path} не найдена.")
+    await asyncio.to_thread(os.makedirs, folder_path, exist_ok=True)
     
     # Получаем список файлов
     dump_files = [
