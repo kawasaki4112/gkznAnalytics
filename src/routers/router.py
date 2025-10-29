@@ -456,7 +456,11 @@ async def process_category_import(event: Message, state: FSMContext):
         await event.answer("⚠️ Ошибка при чтении JSON файла. Пожалуйста, убедитесь, что файл корректен.")
         return
 
-    # === 4. Импортируем в БД ===
+    # === 4. Удаляем старые записи ===
+    await social_subcategory_crud.delete_all()
+    await social_category_crud.delete_all()
+    
+    # === 5. Импортируем в БД ===
     created_count = 0
     for category in data:
         # Создаём категорию
@@ -612,8 +616,10 @@ async def process_service_import(event: Message, state: FSMContext):
     except ValueError:
         await event.answer("⚠️ Ошибка при чтении JSON файла. Пожалуйста, убедитесь, что файл корректен.")
         return
+    # === 4. Удаляем старые записи ===
+    await service_crud.delete_all()
 
-    # === 4. Импортируем в БД ===
+    # === 5. Импортируем в БД ===
     created_count = 0
     for service in data:
         await service_crud.create(

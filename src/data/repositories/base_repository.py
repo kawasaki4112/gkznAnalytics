@@ -87,3 +87,14 @@ class CRUDRepository(Generic[ModelType]):
                 )
                 result = await session.execute(stmt)
             return result.rowcount
+
+    async def delete_all(self) -> int:
+        """
+        Удаляет все записи из таблицы.
+        Возвращает число удалённых строк.
+        """
+        async with async_session() as session:
+            async with session.begin():
+                stmt = delete(self.model)
+                result = await session.execute(stmt)
+            return result.rowcount
