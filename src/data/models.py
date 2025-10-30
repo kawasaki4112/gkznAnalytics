@@ -36,7 +36,7 @@ class User(BaseEntity):
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.USER, nullable=False)
-    social_subcategory_id: Mapped[UUID] = mapped_column(ForeignKey('social_subcategories.id'), nullable=True)
+    social_subcategory_id: Mapped[UUID] = mapped_column(ForeignKey('social_subcategories.id', ondelete="SET NULL"), nullable=True)
 
     aoq: Mapped[list["AssessmentOfQuality"]] = relationship(back_populates="user")
     nps: Mapped[list["NetPromoterScore"]] = relationship(back_populates="user")
