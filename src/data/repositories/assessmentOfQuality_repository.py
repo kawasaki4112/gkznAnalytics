@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.data.repositories.base_repository import CRUDRepository, async_session
-from src.data.models import AssessmentOfQuality
+from src.data.models import AssessmentOfQuality, User
 
 
 class AssessmentOfQualityRepository(CRUDRepository[AssessmentOfQuality]):
@@ -15,7 +15,7 @@ class AssessmentOfQualityRepository(CRUDRepository[AssessmentOfQuality]):
         async with async_session() as session:
             stmt = select(AssessmentOfQuality)
             stmt = stmt.options(
-                selectinload(AssessmentOfQuality.user),
+                selectinload(AssessmentOfQuality.user).selectinload(User.socialsubcategory),
                 selectinload(AssessmentOfQuality.specialist),
                 selectinload(AssessmentOfQuality.service),
             )

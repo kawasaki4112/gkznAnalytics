@@ -272,6 +272,7 @@ async def send_full_statistics_excel(bot: Bot, user_tg_id: int = None):
             "Специалист": aoq.specialist.fullname if aoq.specialist else None,
             "Услуга": aoq.service.name if aoq.service else None,
             "Пользователь": aoq.user.full_name if aoq.user else aoq.user.username if aoq.user else None,
+            "Социальная категория": aoq.user.socialsubcategory.name if aoq.user and aoq.user.socialsubcategory and aoq.user else None,
             "Score": aoq.score,
             "Комментарий": aoq.comment,
             "Дата": aoq.created_at,

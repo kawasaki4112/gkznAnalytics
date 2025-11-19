@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.data.repositories.base_repository import CRUDRepository, async_session
-from src.data.models import NetPromoterScore, AssessmentOfQuality
+from src.data.models import NetPromoterScore, AssessmentOfQuality, User
 
 
 class NetPromoterScoreRepository(CRUDRepository[NetPromoterScore]):
@@ -15,7 +15,7 @@ class NetPromoterScoreRepository(CRUDRepository[NetPromoterScore]):
         async with async_session() as session:
             stmt = select(NetPromoterScore)
             stmt = stmt.options(
-                selectinload(NetPromoterScore.user),
+                selectinload(NetPromoterScore.user).selectinload(User.socialsubcategory),
                 selectinload(NetPromoterScore.aoq).selectinload(AssessmentOfQuality.specialist),
             )
             result = await session.execute(stmt)
