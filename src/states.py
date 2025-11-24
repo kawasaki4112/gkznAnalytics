@@ -6,6 +6,7 @@ class UserStates(StatesGroup):
     waiting_for_assessment_score = State()
     waiting_for_assessment_comment = State()
     waiting_for_username = State()
+    waiting_for_reset_confirmation = State()
     
 class ServiceStates(StatesGroup):
     waiting_for_service_name = State()

@@ -117,10 +117,10 @@ async def confirm_reset_statistics(event: Message, state: FSMContext):
     user = await user_crud.get(tg_id=event.from_user.id)
     
     if user.role != UserRole.ADMIN:
-        await event.answer("⛔ Доступ запрещен!", show_alert=True)
+        await event.answer("⛔ Доступ запрещен!")
         return
     
-    await event.edit_text(
+    await event.answer(
         "⚠️ <b>ВНИМАНИЕ!</b>\n\n"
         "Вы собираетесь удалить ВСЕ данные из таблиц:\n"
         "• Оценки качества (assessments_of_quality)\n"
@@ -130,7 +130,6 @@ async def confirm_reset_statistics(event: Message, state: FSMContext):
         reply_markup=await ikb.reset_statistics_confirmation_kb(),
         parse_mode="HTML"
     )
-    await event.answer()
 
 @router.callback_query(F.data == 'reset_statistics_confirm')
 async def reset_statistics(event: CallbackQuery, state: FSMContext):
@@ -152,13 +151,11 @@ async def reset_statistics(event: CallbackQuery, state: FSMContext):
             f"Удалено записей:\n"
             f"• NPS оценок: {nps_deleted}\n"
             f"• Оценок качества: {aoq_deleted}",
-            reply_markup=await ikb.accesses_kb(),
             parse_mode="HTML"
         )
     except Exception as e:
         await event.message.edit_text(
             f"❌ <b>Ошибка при сбросе статистики:</b>\n\n<code>{str(e)}</code>",
-            reply_markup=await ikb.accesses_kb(),
             parse_mode="HTML"
         )
     
@@ -167,10 +164,7 @@ async def reset_statistics(event: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == 'reset_statistics_cancel')
 async def cancel_reset(event: CallbackQuery, state: FSMContext):
     """Отменить сброс статистики"""
-    await event.message.edit_text(
-        "❌ Сброс статистики отменен.",
-        reply_markup=await ikb.accesses_kb()
-    )
+    await event.message.edit_text("❌ Сброс статистики отменен.")
     await event.answer()
         
 #########################################################################################################################################
