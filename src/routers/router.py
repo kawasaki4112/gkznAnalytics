@@ -40,7 +40,7 @@ async def start(event: Union[Message,CallbackQuery], state: FSMContext, command:
             aoq_list = await aoq_crud.get_list(user_id=user.id)
             now = tz_now_naive()
             last_week = now - timedelta(days=7)
-            
+            specialist = await specialist_crud.get(id=command.args)
             aoq_on_last_7_days = False
             for aoq in aoq_list:
                 if aoq.created_at > last_week:
@@ -51,6 +51,11 @@ async def start(event: Union[Message,CallbackQuery], state: FSMContext, command:
             if aoq_on_last_7_days:
                 await event.answer(
                     "Вы уже оставляли оценку за последние 7 дней. Спасибо!",
+                    reply_markup=await rkb.main_menu_kb(user.tg_id)
+                )
+            elif not specialist:
+                await event.answer(
+                    "Ошибка: специалист не найден.",
                     reply_markup=await rkb.main_menu_kb(user.tg_id)
                 )
             else:
@@ -177,7 +182,7 @@ async def manage_specialists(event: Message, state: FSMContext):
 
     await event.answer(select_menu_item, reply_markup=await ikb.specialist_action_kb())
 
-@router.callback_query(F.data.in_(['import_specialists', 'view_specialists', 'add_specialist', 'remove_specialist']))
+@router.callback_query(F.data.in_(['import_specialists', 'view_specialists', 'search_specialist', 'add_specialist', 'remove_specialist']))
 async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
     await state.clear()
     
@@ -186,33 +191,25 @@ async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
         await state.set_state(st.SpecialistStates.waiting_for_specialist_import)
     
     elif event.data == 'view_specialists':
-        await event.message.delete()
-        specialists = await specialist_crud.get_list()
-        if not specialists:
-            await event.message.answer("Список специалистов пуст.", reply_markup=await ikb.specialist_action_kb())
+        organizations = await specialist_crud.get_unique_organizations()
+        if not organizations:
+            await event.message.edit_text("Список организаций пуст.", reply_markup=await ikb.specialist_action_kb())
             return
 
-        lines = [
-            f"{idx+1}. {spec.fullname} — {spec.position} в {spec.organization}\n🔗 {spec.link or 'ссылка отсутствует'}"
-            for idx, spec in enumerate(specialists)
-        ]
+        await event.message.edit_text(
+            "🏢 <b>Выберите организацию:</b>",
+            reply_markup=await ikb.organizations_list_kb(page=1),
+            parse_mode="HTML"
+        )
 
-        chunks = []
-        current = ""
-        for line in lines:
-            if len(current) + len(line) + 1 > 4000:
-                chunks.append(current)
-                current = ""
-            current += line + "\n"
-        if current:
-            chunks.append(current)
-
-        await event.message.answer("*Список специалистов:*", parse_mode="HTML")
-        for chunk in chunks:
-            await event.message.answer(f"\n{chunk}", parse_mode="HTML")
-
-        await event.message.answer(select_menu_item, reply_markup=await ikb.specialist_action_kb())
-
+    elif event.data == 'search_specialist':
+        await event.message.edit_text(
+            "🔍 <b>Поиск специалиста</b>\n\n"
+            "Введите ФИО, должность или организацию для поиска:",
+            reply_markup=None,
+            parse_mode="HTML"
+        )
+        await state.set_state(st.SpecialistStates.waiting_for_search_query)
 
     elif event.data == 'add_specialist':
         await event.message.edit_text("Напишите ФИО специалиста:", reply_markup=None)
@@ -223,6 +220,210 @@ async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
         await state.set_state(st.SpecialistStates.waiting_for_specialist_fio)
         
         await state.update_data(action='remove_specialist')
+
+@router.callback_query(F.data.startswith('change_page@organizations:'))
+async def change_organizations_page(event: CallbackQuery, state: FSMContext):
+    """Обработчик пагинации для списка организаций"""
+    page = int(event.data.split(':')[1])
+    
+    await event.message.edit_text(
+        "🏢 <b>Выберите организацию:</b>",
+        reply_markup=await ikb.organizations_list_kb(page=page),
+        parse_mode="HTML"
+    )
+    await event.answer()
+
+@router.callback_query(F.data.startswith('select_org:'))
+async def select_organization(event: CallbackQuery, state: FSMContext):
+    """Показать список специалистов выбранной организации"""
+    org_idx = int(event.data.split(':')[1])
+    
+    # Получаем список организаций
+    organizations = await specialist_crud.get_unique_organizations()
+    if org_idx >= len(organizations):
+        await event.answer("❌ Организация не найдена", show_alert=True)
+        return
+    
+    organization = organizations[org_idx]
+    
+    # Сохраняем организацию в состояние
+    await state.update_data(current_organization=organization)
+    
+    specialists = await specialist_crud.get_list(organization=organization)
+    if not specialists:
+        await event.answer("В данной организации нет специалистов", show_alert=True)
+        return
+    
+    await event.message.edit_text(
+        f"🏢 <b>{organization}</b>\n\n"
+        f"Специалистов: {len(specialists)}\n\n"
+        f"Выберите специалиста для просмотра карточки:",
+        reply_markup=await ikb.specialists_list_kb(organization=organization, page=1),
+        parse_mode="HTML"
+    )
+    await event.answer()
+
+@router.callback_query(F.data.startswith('pg@s:'))
+async def change_specialists_page(event: CallbackQuery, state: FSMContext):
+    """Обработчик пагинации для списка специалистов"""
+    page = int(event.data.split(':')[1])
+    
+    # Получаем данные из состояния
+    data = await state.get_data()
+    organization = data.get('current_organization')
+    search_query = data.get('search_query')
+    
+    if search_query:
+        # Поиск специалистов
+        all_specialists = await specialist_crud.get_list()
+        specialists = [
+            spec for spec in all_specialists
+            if search_query.lower() in spec.fullname.lower() or
+               search_query.lower() in spec.position.lower() or
+               search_query.lower() in spec.organization.lower()
+        ]
+        message_text = f"🔍 <b>Результаты поиска:</b> \"{search_query}\"\n\n"
+        if specialists:
+            message_text += "Выберите специалиста для просмотра карточки:"
+        else:
+            message_text += "Ничего не найдено"
+    elif organization:
+        specialists = await specialist_crud.get_list(organization=organization)
+        message_text = f"🏢 <b>{organization}</b>\n\nВыберите специалиста для просмотра карточки:"
+    else:
+        specialists = None
+        message_text = "📋 <b>Список специалистов:</b>\n\nВыберите специалиста для просмотра карточки:"
+    
+    await event.message.edit_text(
+        message_text,
+        reply_markup=await ikb.specialists_list_kb(organization=organization, page=page, specialists_list=specialists, search_query=search_query),
+        parse_mode="HTML"
+    )
+    await event.answer()
+
+@router.callback_query(F.data.startswith('vsc:'))
+async def view_specialist_card(event: CallbackQuery, state: FSMContext):
+    """Показать карточку специалиста"""
+    parts = event.data.split(':')
+    specialist_id = parts[1]
+    page = int(parts[2]) if len(parts) > 2 else 1
+    
+    specialist = await specialist_crud.get(id=specialist_id)
+    if not specialist:
+        await event.answer("❌ Специалист не найден", show_alert=True)
+        return
+    
+    # Сохраняем страницу в состояние
+    await state.update_data(current_page=page)
+    
+    # Формируем карточку специалиста
+    card_text = (
+        f"👤 <b>Карточка специалиста</b>\n\n"
+        f"<b>ФИО:</b> {specialist.fullname}\n"
+        f"<b>Должность:</b> {specialist.position}\n"
+        f"<b>Организация:</b> {specialist.organization}\n"
+    )
+    
+    if specialist.department and specialist.department != '-':
+        card_text += f"<b>Отдел:</b> {specialist.department}\n"
+    
+    if specialist.link:
+        card_text += f"\n🔗 <b>Ссылка:</b> {specialist.link}"
+    
+    # Если есть QR-код, отправляем его как фото с caption
+    if specialist.qr:
+        await event.message.delete()
+        await event.bot.send_photo(
+            chat_id=event.from_user.id,
+            photo=specialist.qr,
+            caption=card_text,
+            reply_markup=await ikb.specialist_card_kb(specialist_id, page),
+            parse_mode="HTML"
+        )
+    else:
+        await event.message.edit_text(
+            card_text,
+            reply_markup=await ikb.specialist_card_kb(specialist_id, page),
+            parse_mode="HTML"
+        )
+    await event.answer()
+
+@router.message(st.SpecialistStates.waiting_for_search_query)
+async def process_search_query(event: Message, state: FSMContext):
+    """Обработать поисковый запрос"""
+    query = event.text.strip()
+    
+    if not query:
+        await event.answer("⚠️ Пожалуйста, введите корректный запрос", reply_markup=await ikb.specialist_action_kb())
+        await state.clear()
+        return
+    
+    # Поиск специалистов
+    all_specialists = await specialist_crud.get_list()
+    specialists = [
+        spec for spec in all_specialists
+        if query.lower() in spec.fullname.lower() or
+           query.lower() in spec.position.lower() or
+           query.lower() in spec.organization.lower()
+    ]
+    
+    if not specialists:
+        await event.answer(
+            f"🔍 <b>Результаты поиска:</b> \"{query}\"\n\n"
+            f"❌ Ничего не найдено.\n\n"
+            f"Попробуйте изменить запрос.",
+            reply_markup=await ikb.specialist_action_kb(),
+            parse_mode="HTML"
+        )
+        await state.clear()
+        return
+    
+    # Сохраняем поисковый запрос в состояние
+    await state.update_data(search_query=query, current_organization=None)
+    
+    await event.answer(
+        f"🔍 <b>Результаты поиска:</b> \"{query}\"\n\n"
+        f"Найдено специалистов: {len(specialists)}\n\n"
+        f"Выберите специалиста для просмотра карточки:",
+        reply_markup=await ikb.specialists_list_kb(page=1, specialists_list=specialists, search_query=query),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith('btsl:'))
+async def back_to_specialists_list(event: CallbackQuery, state: FSMContext):
+    """Вернуться к списку специалистов"""
+    page = int(event.data.split(':')[1])
+    
+    # Получаем данные из состояния
+    data = await state.get_data()
+    organization = data.get('current_organization')
+    search_query = data.get('search_query')
+    
+    if organization:
+        specialists = await specialist_crud.get_list(organization=organization)
+        message_text = f"🏢 <b>{organization}</b>\n\nВыберите специалиста для просмотра карточки:"
+    else:
+        message_text = "📋 <b>Список специалистов:</b>\n\nВыберите специалиста для просмотра карточки:"
+    
+    await event.message.edit_text(
+        message_text,
+        reply_markup=await ikb.specialists_list_kb(organization=organization, page=page, search_query=search_query),
+        parse_mode="HTML"
+    )
+    await event.answer()
+
+@router.callback_query(F.data == 'back_to_specialists_menu')
+async def back_to_specialists_menu(event: CallbackQuery, state: FSMContext):
+    """Вернуться в меню специалистов"""
+    # Очищаем сохраненные данные
+    data = await state.get_data()
+    if 'current_organization' in data:
+        await state.update_data(current_organization=None)
+    if 'search_query' in data:
+        await state.update_data(search_query=None)
+    
+    await event.message.edit_text(select_menu_item, reply_markup=await ikb.specialist_action_kb())
+    await event.answer()
 
 @router.message(st.SpecialistStates.waiting_for_specialist_import)
 async def process_specialist_import(event: Message, state: FSMContext):
@@ -262,6 +463,7 @@ async def process_specialist_import(event: Message, state: FSMContext):
         if not existing:
             specialists_to_create.append(row_data)
 
+    new_specialist_ids = []
     for spec in specialists_to_create:
         spec_obj = await specialist_crud.create(**spec)
         await specialist_crud.update(
@@ -272,6 +474,7 @@ async def process_specialist_import(event: Message, state: FSMContext):
             },
             updates={"link": f"https://t.me/{bot_username}?start={spec_obj.id}"}
         )
+        new_specialist_ids.append(spec_obj.id)
         created_count += 1
 
     try:
@@ -280,10 +483,16 @@ async def process_specialist_import(event: Message, state: FSMContext):
         pass
 
     await event.answer(
-        f"Файл обработан.\nДобавлено {created_count} новых специалистов.",
+        f"Файл обработан.\nДобавлено {created_count} новых специалистов.\n\n"
+        f"QR-коды генерируются в фоновом режиме...",
         reply_markup=await ikb.specialist_action_kb()
     )
     await state.clear()
+    
+    # Запускаем генерацию QR-кодов в фоновом режиме
+    if new_specialist_ids:
+        from src.utils.qr_generator import generate_qr_for_specialists
+        asyncio.create_task(generate_qr_for_specialists(event.bot, new_specialist_ids, event.from_user.id))
 
 @router.message(st.SpecialistStates.waiting_for_specialist_fio)
 async def process_specialist_fio(event: Message, state: FSMContext):
@@ -330,8 +539,16 @@ async def process_specialist_position(event: Message, state: FSMContext):
             updates={"link": f"https://t.me/{bot.username}?start={specialist.id}"}
         )
         
-    await event.answer(f"Специалист {data['fullname']} был добавлен.", reply_markup=await rkb.main_menu_kb(event.from_user.id))
+    await event.answer(
+        f"Специалист {data['fullname']} был добавлен.\n\n"
+        f"QR-код генерируется в фоновом режиме...",
+        reply_markup=await rkb.main_menu_kb(event.from_user.id)
+    )
     await state.clear()
+    
+    # Запускаем генерацию QR-кода в фоновом режиме
+    from src.utils.qr_generator import generate_qr_for_specialists
+    asyncio.create_task(generate_qr_for_specialists(event.bot, [specialist.id], event.from_user.id))
     
 #############################################################################################################################################
 ############################################################## Оценка качества ##############################################################

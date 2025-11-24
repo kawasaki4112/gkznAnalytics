@@ -201,6 +201,7 @@ async def specialist_action_kb():
     buttons = (
         ikb(text="Импорт специалистов EXCEL", callback_data='import_specialists'),
         ikb(text="Просмотреть специалистов", callback_data='view_specialists'),
+        ikb(text="Поиск специалиста", callback_data='search_specialist'),
         ikb(text="Добавить специалиста", callback_data='add_specialist'),
         ikb(text="Удалить специалиста", callback_data='remove_specialist'),
     )
@@ -208,6 +209,127 @@ async def specialist_action_kb():
     builder.row(*buttons)
     builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
     builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+async def organizations_list_kb(page: int = 1) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для списка организаций с пагинацией.
+    """
+    from src.data.repositories.specialist_repository import specialist_crud
+    
+    organizations = await specialist_crud.get_unique_organizations()
+    per_page = 10
+    total = len(organizations)
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопки для организаций на текущей странице
+    for idx, org in enumerate(organizations[start:end], start=start):
+        builder.row(
+            ikb(
+                text=org, 
+                callback_data=f'select_org:{idx}'
+            )
+        )
+
+    # --- пагинация ---
+    pagination_buttons = []
+    if page > 1:
+        pagination_buttons.append(
+            ikb(
+                text="⬅️",
+                callback_data=f'change_page@organizations:{page-1}'
+            )
+        )
+    if end < total:
+        pagination_buttons.append(
+            ikb(
+                text="➡️",
+                callback_data=f'change_page@organizations:{page+1}'
+            )
+        )
+    if pagination_buttons:
+        builder.row(*pagination_buttons)
+
+    # Кнопки навигации
+    builder.row(ikb(text="🔙 Назад", callback_data='back_to_specialists_menu'))
+    builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
+
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+async def specialists_list_kb(organization: str = None, page: int = 1, specialists_list=None, search_query: str = None) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для списка специалистов с пагинацией.
+    """
+    from src.data.repositories.specialist_repository import specialist_crud
+    
+    if specialists_list is None:
+        if organization:
+            specialists = await specialist_crud.get_list(organization=organization)
+        else:
+            specialists = await specialist_crud.get_list()
+    else:
+        specialists = specialists_list
+        
+    per_page = 10
+    total = len(specialists)
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопки для специалистов на текущей странице
+    for spec in specialists[start:end]:
+        button_text = f"{spec.fullname} — {spec.position}"
+        # Используем только ID специалиста, остальное в state
+        builder.row(
+            ikb(
+                text=button_text, 
+                callback_data=f'vsc:{spec.id}:{page}'
+            )
+        )
+
+    # --- пагинация ---
+    pagination_buttons = []
+    if page > 1:
+        pagination_buttons.append(
+            ikb(
+                text="⬅️",
+                callback_data=f'pg@s:{page-1}'
+            )
+        )
+    if end < total:
+        pagination_buttons.append(
+            ikb(
+                text="➡️",
+                callback_data=f'pg@s:{page+1}'
+            )
+        )
+    if pagination_buttons:
+        builder.row(*pagination_buttons)
+
+    # Кнопки навигации
+    if search_query:
+        builder.row(ikb(text="🔍 Новый поиск", callback_data='search_specialist'))
+    if organization:
+        builder.row(ikb(text="🔙 К списку организаций", callback_data='view_specialists'))
+    else:
+        builder.row(ikb(text="🔙 Назад", callback_data='back_to_specialists_menu'))
+    builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
+
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+async def specialist_card_kb(specialist_id: str, page: int = 1) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для карточки специалиста.
+    """
+    builder = InlineKeyboardBuilder()
+    
+    builder.row(ikb(text="🔙 К списку специалистов", callback_data=f'btsl:{page}'))
+    builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
+    
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
 
 async def spam_confirmation_kb():

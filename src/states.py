@@ -18,6 +18,7 @@ class SpecialistStates(StatesGroup):
     waiting_for_specialist_department = State()
     waiting_for_specialist_position = State()
     waiting_for_specialist_import = State()
+    waiting_for_search_query = State()
     
 class SpamStates(StatesGroup):
     waiting_for_spam_text = State()

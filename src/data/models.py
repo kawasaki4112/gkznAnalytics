@@ -74,6 +74,7 @@ class Specialist(BaseEntity):
     fullname: Mapped[str] = mapped_column(String(255), nullable=False)
     department: Mapped[str] = mapped_column(String(255), nullable=True)
     link: Mapped[str] = mapped_column(String(1000), nullable=True)
+    qr: Mapped[str] = mapped_column(String(1000), nullable=True)
     
     aoq: Mapped[list["AssessmentOfQuality"]] = relationship(back_populates="specialist", cascade="all, delete-orphan")
 
