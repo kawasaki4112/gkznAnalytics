@@ -38,6 +38,10 @@ async def main_menu_kb(tg_id: int) -> ReplyKeyboardMarkup:
             rkb("📊 Аналитика"),
             rkb("📢 Рассылка"),
         )
+        
+        builder.row(
+            rkb("🗑 Сброс статистики")
+        )
     
     else:
         return None

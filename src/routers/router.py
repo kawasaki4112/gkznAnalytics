@@ -110,6 +110,68 @@ async def process_username(event: Message, state: FSMContext):
 
         await event.answer(f"Пользователь @{username} был {"удален" if action == "removed" else "добавлен"} как {"администратор" if role == "admin" else "модератор"}.", reply_markup=await rkb.main_menu_kb(event.from_user.id))
         await state.clear()
+
+@router.message(F.text.in_(['🗑 Сброс статистики']))
+async def confirm_reset_statistics(event: Message, state: FSMContext):
+    """Показать подтверждение сброса статистики (только для админов)"""
+    user = await user_crud.get(tg_id=event.from_user.id)
+    
+    if user.role != UserRole.ADMIN:
+        await event.answer("⛔ Доступ запрещен!", show_alert=True)
+        return
+    
+    await event.edit_text(
+        "⚠️ <b>ВНИМАНИЕ!</b>\n\n"
+        "Вы собираетесь удалить ВСЕ данные из таблиц:\n"
+        "• Оценки качества (assessments_of_quality)\n"
+        "• NPS оценки (net_promoter_scores)\n\n"
+        "Это действие необратимо!\n\n"
+        "Вы уверены?",
+        reply_markup=await ikb.reset_statistics_confirmation_kb(),
+        parse_mode="HTML"
+    )
+    await event.answer()
+
+@router.callback_query(F.data == 'reset_statistics_confirm')
+async def reset_statistics(event: CallbackQuery, state: FSMContext):
+    """Выполнить сброс статистики (только для админов)"""
+    user = await user_crud.get(tg_id=event.from_user.id)
+    
+    if user.role != UserRole.ADMIN:
+        await event.answer("⛔ Доступ запрещен!", show_alert=True)
+        return
+    
+    try:
+        # Сначала удаляем NPS (из-за foreign key)
+        nps_deleted = await nps_crud.delete_all()
+        # Затем удаляем оценки качества
+        aoq_deleted = await aoq_crud.delete_all()
+        
+        await event.message.edit_text(
+            f"✅ <b>Статистика успешно сброшена!</b>\n\n"
+            f"Удалено записей:\n"
+            f"• NPS оценок: {nps_deleted}\n"
+            f"• Оценок качества: {aoq_deleted}",
+            reply_markup=await ikb.accesses_kb(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await event.message.edit_text(
+            f"❌ <b>Ошибка при сбросе статистики:</b>\n\n<code>{str(e)}</code>",
+            reply_markup=await ikb.accesses_kb(),
+            parse_mode="HTML"
+        )
+    
+    await event.answer()
+
+@router.callback_query(F.data == 'reset_statistics_cancel')
+async def cancel_reset(event: CallbackQuery, state: FSMContext):
+    """Отменить сброс статистики"""
+    await event.message.edit_text(
+        "❌ Сброс статистики отменен.",
+        reply_markup=await ikb.accesses_kb()
+    )
+    await event.answer()
         
 #########################################################################################################################################
 ############################################################## Специалисты ##############################################################

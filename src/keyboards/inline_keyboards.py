@@ -222,3 +222,16 @@ async def spam_confirmation_kb():
 
     builder.row(*buttons)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+async def reset_statistics_confirmation_kb():
+    """
+    Клавиатура для подтверждения сброса статистики.
+    """
+    builder = InlineKeyboardBuilder()
+    buttons = (
+        ikb(text="✅ Да, удалить все данные", callback_data='reset_statistics_confirm'),
+        ikb(text="❌ Отмена", callback_data='reset_statistics_cancel'),
+    )
+
+    builder.row(*buttons)
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
