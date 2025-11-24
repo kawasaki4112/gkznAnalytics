@@ -25,6 +25,22 @@ router = Router(name="user_router")
 
 select_menu_item = "Выберите пункт меню:"
 
+async def safe_edit_message(event: CallbackQuery, text: str, reply_markup=None, parse_mode: str = None):
+    """
+    Безопасное редактирование сообщения. Если не удается отредактировать (например, сообщение с фото),
+    удаляет старое и отправляет новое.
+    """
+    try:
+        await event.message.edit_text(text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+    except:
+        await event.message.delete()
+        await event.bot.send_message(
+            chat_id=event.from_user.id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+
 @router.callback_query(F.data.in_(['main_menu']))
 @router.message(F.text.in_('🏠 Главное меню'))
 @router.message(Command("start"))
@@ -182,7 +198,7 @@ async def manage_specialists(event: Message, state: FSMContext):
 
     await event.answer(select_menu_item, reply_markup=await ikb.specialist_action_kb())
 
-@router.callback_query(F.data.in_(['import_specialists', 'view_specialists', 'search_specialist', 'add_specialist', 'remove_specialist']))
+@router.callback_query(F.data.in_(['import_specialists', 'view_specialists', 'export_specialists_word', 'search_specialist', 'add_specialist', 'remove_specialist']))
 async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
     await state.clear()
     
@@ -193,12 +209,37 @@ async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
     elif event.data == 'view_specialists':
         organizations = await specialist_crud.get_unique_organizations()
         if not organizations:
-            await event.message.edit_text("Список организаций пуст.", reply_markup=await ikb.specialist_action_kb())
+            try:
+                await event.message.edit_text("Список организаций пуст.", reply_markup=await ikb.specialist_action_kb())
+            except:
+                await event.message.delete()
+                await event.bot.send_message(
+                    chat_id=event.from_user.id,
+                    text="Список организаций пуст.",
+                    reply_markup=await ikb.specialist_action_kb()
+                )
             return
 
+        try:
+            await event.message.edit_text(
+                "🏢 <b>Выберите организацию:</b>",
+                reply_markup=await ikb.organizations_list_kb(page=1),
+                parse_mode="HTML"
+            )
+        except:
+            await event.message.delete()
+            await event.bot.send_message(
+                chat_id=event.from_user.id,
+                text="🏢 <b>Выберите организацию:</b>",
+                reply_markup=await ikb.organizations_list_kb(page=1),
+                parse_mode="HTML"
+            )
+
+    elif event.data == 'export_specialists_word':
         await event.message.edit_text(
-            "🏢 <b>Выберите организацию:</b>",
-            reply_markup=await ikb.organizations_list_kb(page=1),
+            "📄 <b>Выгрузка специалистов в Word</b>\n\n"
+            "Выберите вариант экспорта:",
+            reply_markup=await ikb.export_specialists_kb(),
             parse_mode="HTML"
         )
 
@@ -221,6 +262,34 @@ async def manage_specialists_callback(event: CallbackQuery, state: FSMContext):
         
         await state.update_data(action='remove_specialist')
 
+@router.callback_query(F.data.startswith('export_word:'))
+async def export_word_callback(event: CallbackQuery, state: FSMContext):
+    """Обработчик экспорта в Word"""
+    export_type = event.data.split(':')[1]
+    
+    if export_type == 'all':
+        await event.message.edit_text(
+            "⏳ <b>Начинаем экспорт всех специалистов...</b>",
+            parse_mode="HTML"
+        )
+        
+        # Запускаем экспорт в фоновом режиме
+        from src.utils.word_export import export_specialists_to_word
+        asyncio.create_task(export_specialists_to_word(event.bot, event.from_user.id))
+        
+    elif export_type == 'by_org':
+        organizations = await specialist_crud.get_unique_organizations()
+        if not organizations:
+            await event.answer("❌ Нет организаций", show_alert=True)
+            return
+        
+        await event.message.edit_text(
+            "🏢 <b>Выберите организацию для экспорта:</b>",
+            reply_markup=await ikb.organizations_list_kb(page=1),
+            parse_mode="HTML"
+        )
+        await state.update_data(export_mode=True)
+
 @router.callback_query(F.data.startswith('change_page@organizations:'))
 async def change_organizations_page(event: CallbackQuery, state: FSMContext):
     """Обработчик пагинации для списка организаций"""
@@ -235,7 +304,7 @@ async def change_organizations_page(event: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith('select_org:'))
 async def select_organization(event: CallbackQuery, state: FSMContext):
-    """Показать список специалистов выбранной организации"""
+    """Показать список специалистов выбранной организации или экспортировать"""
     org_idx = int(event.data.split(':')[1])
     
     # Получаем список организаций
@@ -246,6 +315,24 @@ async def select_organization(event: CallbackQuery, state: FSMContext):
     
     organization = organizations[org_idx]
     
+    # Проверяем режим экспорта
+    data = await state.get_data()
+    if data.get('export_mode'):
+        # Режим экспорта
+        await state.update_data(export_mode=False)
+        
+        await event.message.edit_text(
+            f"⏳ <b>Начинаем экспорт специалистов</b>\n\n"
+            f"Организация: {organization}",
+            parse_mode="HTML"
+        )
+        
+        # Запускаем экспорт в фоновом режиме
+        from src.utils.word_export import export_specialists_to_word
+        asyncio.create_task(export_specialists_to_word(event.bot, event.from_user.id, organization))
+        return
+    
+    # Обычный режим просмотра
     # Сохраняем организацию в состояние
     await state.update_data(current_organization=organization)
     
@@ -294,7 +381,8 @@ async def change_specialists_page(event: CallbackQuery, state: FSMContext):
         specialists = None
         message_text = "📋 <b>Список специалистов:</b>\n\nВыберите специалиста для просмотра карточки:"
     
-    await event.message.edit_text(
+    await safe_edit_message(
+        event,
         message_text,
         reply_markup=await ikb.specialists_list_kb(organization=organization, page=page, specialists_list=specialists, search_query=search_query),
         parse_mode="HTML"
@@ -405,7 +493,8 @@ async def back_to_specialists_list(event: CallbackQuery, state: FSMContext):
     else:
         message_text = "📋 <b>Список специалистов:</b>\n\nВыберите специалиста для просмотра карточки:"
     
-    await event.message.edit_text(
+    await safe_edit_message(
+        event,
         message_text,
         reply_markup=await ikb.specialists_list_kb(organization=organization, page=page, search_query=search_query),
         parse_mode="HTML"
@@ -422,7 +511,11 @@ async def back_to_specialists_menu(event: CallbackQuery, state: FSMContext):
     if 'search_query' in data:
         await state.update_data(search_query=None)
     
-    await event.message.edit_text(select_menu_item, reply_markup=await ikb.specialist_action_kb())
+    await safe_edit_message(
+        event,
+        select_menu_item,
+        reply_markup=await ikb.specialist_action_kb()
+    )
     await event.answer()
 
 @router.message(st.SpecialistStates.waiting_for_specialist_import)

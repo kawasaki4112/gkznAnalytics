@@ -201,12 +201,29 @@ async def specialist_action_kb():
     buttons = (
         ikb(text="Импорт специалистов EXCEL", callback_data='import_specialists'),
         ikb(text="Просмотреть специалистов", callback_data='view_specialists'),
-        ikb(text="Поиск специалиста", callback_data='search_specialist'),
+        ikb(text="📄 Выгрузить в Word", callback_data='export_specialists_word'),
+        ikb(text="🔍 Поиск специалиста", callback_data='search_specialist'),
         ikb(text="Добавить специалиста", callback_data='add_specialist'),
         ikb(text="Удалить специалиста", callback_data='remove_specialist'),
     )
 
     builder.row(*buttons)
+    builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+async def export_specialists_kb():
+    """
+    Клавиатура для выбора способа экспорта специалистов.
+    """
+    builder = InlineKeyboardBuilder()
+    buttons = (
+        ikb(text="📋 Все специалисты", callback_data='export_word:all'),
+        ikb(text="🏢 По организации", callback_data='export_word:by_org'),
+    )
+    
+    builder.row(*buttons)
+    builder.row(ikb(text="🔙 Назад", callback_data='back_to_specialists_menu'))
     builder.row(ikb(text="🏠 Главное меню", callback_data='main_menu'))
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
