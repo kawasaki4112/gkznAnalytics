@@ -718,7 +718,7 @@ async def process_assessment_comment(event: Message, state: FSMContext):
 async def send_nps(event: Message, state: FSMContext, aoq_id: str):
     nps_delay = int(os.getenv("NPS_DELAY_MINUTES", "10")) * 60
     await asyncio.sleep(nps_delay)
-    await event.message.answer("Пожалуйста, оцените вашу общую удовлетворенность услугой, порекомендуете ли вы нас?", 
+    await event.answer("Пожалуйста, оцените вашу общую удовлетворенность услугой, порекомендуете ли вы нас?", 
                        reply_markup=await ikb.assessment_score_kb(_type="nps"))
     await state.set_state(st.UserStates.waiting_for_assessment_score)
     await state.update_data(aoq_id=aoq_id)
